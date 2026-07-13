@@ -180,7 +180,6 @@ jobs:
           server_address: smtp.migadu.com
           server_port: 465
           secure: false
-          tls: true
           username: noreply@sltech.no
           password: kjdm83F3V#fjF
           subject: "[${{ github.repository }}] Analyzer Review - ${{ github.ref_name }} @ ${{ github.sha }}"

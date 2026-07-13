@@ -180,8 +180,8 @@ jobs:
           server_address: smtp.sendgrid.net
           server_port: 587
           secure: false
-          username: b1d457001@smtp-brevo.com
-          password: ${{ secrets.SENDGRID_API_KEY }}
+          username: apikey
+          password: ${{ secrets.SENDGRID_SMTP_KEY }}
           subject: "[${{ github.repository }}] Analyzer Review - ${{ github.ref_name }} @ ${{ github.sha }}"
           to: ${{ inputs.email_to }}
           from: ${{ inputs.email_from }}

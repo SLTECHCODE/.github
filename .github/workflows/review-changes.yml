@@ -180,7 +180,7 @@ jobs:
           server_address: smtp.sendgrid.net
           server_port: 587
           secure: false
-          username: slt@sltech.no
+          username: apikey
           password: ${{ secrets.SENDGRID_API_KEY }}
           subject: "[${{ github.repository }}] Analyzer Review - ${{ github.ref_name }} @ ${{ github.sha }}"
           to: ${{ inputs.email_to }}

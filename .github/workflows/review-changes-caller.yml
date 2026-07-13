@@ -7,7 +7,7 @@ on:
       - "**"
 jobs:
   review:
-    uses: SteinLundbeckTech/.github/.github/workflows/review-changes.yml@main
+    uses: SLTECHCODE/.github/.github/workflows/review-changes.yml@main
     with:
       email_to: "slt@sltech.no"
       email_from: "noreply@sltech.no"

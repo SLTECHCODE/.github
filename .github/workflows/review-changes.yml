@@ -1,0 +1,195 @@
+name: Multi-language Analyzer Review
+
+on:
+  workflow_call:
+    inputs:
+      email_to:
+        type: string
+        required: true
+        default: "slt@sltech.no"
+      email_from:
+        type: string
+        required: true
+        default: "noreply@sltech.no"
+    secrets:
+      SENDGRID_API_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-and-email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Determine changed files
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            git ls-files > changed_files.txt
+          else
+            git diff --name-only "$BEFORE" "$AFTER" > changed_files.txt
+          fi
+
+          has_cs=false
+          has_js_ts=false
+          has_py=false
+          grep -E '\.(cs|csproj|sln)$' changed_files.txt >/dev/null 2>&1 && has_cs=true || true
+          grep -E '\.(js|jsx|ts|tsx)$' changed_files.txt >/dev/null 2>&1 && has_js_ts=true || true
+          grep -E '\.py$' changed_files.txt >/dev/null 2>&1 && has_py=true || true
+
+          echo "has_cs=$has_cs" >> "$GITHUB_OUTPUT"
+          echo "has_js_ts=$has_js_ts" >> "$GITHUB_OUTPUT"
+          echo "has_py=$has_py" >> "$GITHUB_OUTPUT"
+
+      - name: Install JS deps (if package.json exists)
+        if: steps.changes.outputs.has_js_ts == 'true' && hashFiles('**/package.json') != ''
+        shell: bash
+        run: |
+          set +e
+          npm ci
+          rc=$?
+          set -e
+          if [ $rc -ne 0 ]; then npm install; fi
+
+      - name: Install Python deps
+        if: steps.changes.outputs.has_py == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Run Roslyn analyzers (.NET build)
+        if: steps.changes.outputs.has_cs == 'true'
+        shell: bash
+        run: |
+          set +e
+          SLN_FILE="$(find . -maxdepth 4 -name '*.sln' | head -n 1)"
+          if [ -n "$SLN_FILE" ]; then
+            dotnet restore "$SLN_FILE" > dotnet_restore.log 2>&1
+            dotnet build "$SLN_FILE" -c Release -v minimal /p:EnableNETAnalyzers=true /p:AnalysisLevel=latest > dotnet_build.log 2>&1
+          else
+            : > dotnet_restore.log
+            : > dotnet_build.log
+            while IFS= read -r CSPROJ; do
+              dotnet restore "$CSPROJ" >> dotnet_restore.log 2>&1
+              dotnet build "$CSPROJ" -c Release -v minimal /p:EnableNETAnalyzers=true /p:AnalysisLevel=latest >> dotnet_build.log 2>&1
+            done < <(find . -name '*.csproj')
+          fi
+          echo $? > dotnet_exit_code.txt
+          set -e
+          true
+
+      - name: Run ESLint
+        if: steps.changes.outputs.has_js_ts == 'true'
+        shell: bash
+        run: |
+          set +e
+          if [ -f eslint.config.js ] || [ -f eslint.config.mjs ] || [ -f .eslintrc ] || [ -f .eslintrc.json ] || [ -f .eslintrc.js ]; then
+            npx eslint . -f stylish > eslint.log 2>&1
+            echo $? > eslint_exit_code.txt
+          else
+            echo "No ESLint config found. Skipping ESLint." > eslint.log
+            echo 0 > eslint_exit_code.txt
+          fi
+          set -e
+          true
+
+      - name: Run Ruff
+        if: steps.changes.outputs.has_py == 'true'
+        shell: bash
+        run: |
+          set +e
+          ruff check . > ruff.log 2>&1
+          echo $? > ruff_exit_code.txt
+          set -e
+          true
+
+      - name: Build markdown report
+        if: always()
+        shell: bash
+        run: |
+          cat > build_review_report.py << 'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          def read_text(p, d=""):
+              f=Path(p)
+              return f.read_text(encoding="utf-8", errors="replace") if f.exists() else d
+
+          def read_ec(p):
+              f=Path(p)
+              if not f.exists(): return None
+              try: return int(f.read_text().strip())
+              except: return None
+
+          def stat(name, ec):
+              if ec is None: return f"### {name}\nStatus: `not run`\n"
+              return f"### {name}\nStatus: `passed` ✅\n" if ec==0 else f"### {name}\nStatus: `issues found / failed` ❌ (exit code {ec})\n"
+
+          def trunc(t, n=120):
+              L=t.splitlines()
+              if len(L)<=n: return "\n".join(L)
+              return "\n".join(L[:n//2]+["... (truncated) ..."]+L[-n//2:])
+
+          changed=read_text("changed_files.txt")
+          dotnet_log=read_text("dotnet_build.log","(No .NET log found)")
+          eslint_log=read_text("eslint.log","(No ESLint log found)")
+          ruff_log=read_text("ruff.log","(No Ruff log found)")
+          de,ee,re = read_ec("dotnet_exit_code.txt"), read_ec("eslint_exit_code.txt"), read_ec("ruff_exit_code.txt")
+
+          now=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+          out=[]
+          out += ["# Automated Push Analyzer Report","",f"Generated (UTC): **{now}**","","## Changed files","```",changed.strip() or "(none)","```",""]
+          out += ["## Analyzer results","",stat("Roslyn analyzers via dotnet build",de),"```text",trunc(dotnet_log),"```",""]
+          out += [stat("ESLint (JS/TS)",ee),"```text",trunc(eslint_log),"```",""]
+          out += [stat("Ruff (Python)",re),"```text",trunc(ruff_log),"```",""]
+          Path("review_report.md").write_text("\n".join(out),encoding="utf-8")
+          PY
+          python build_review_report.py
+
+      - name: Send email
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.sendgrid.net
+          server_port: 587
+          secure: false
+          username: slt@sltech.no
+          password: ${{ secrets.SENDGRID_API_KEY }}
+          subject: "[${{ github.repository }}] Analyzer Review - ${{ github.ref_name }} @ ${{ github.sha }}"
+          to: ${{ inputs.email_to }}
+          from: ${{ inputs.email_from }}
+          body: |
+            Automated analyzer review completed.
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Actor: ${{ github.actor }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          attachments: review_report.md

@@ -1,0 +1,15 @@
+name: Review on Push
+description: "Shared workflow that triggers the Multi-language Analyzer Review workflow on push events."
+
+on:
+  push:
+    branches:
+      - "**"
+jobs:
+  review:
+    uses: SteinLundbeckTech/.github/.github/workflows/review-changes.yml@main
+    with:
+      email_to: "slt@sltech.no"
+      email_from: "noreply@sltech.no"
+    secrets:
+      SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}

@@ -13,3 +13,4 @@ jobs:
       email_from: "noreply@sltech.no"
     secrets:
       SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}

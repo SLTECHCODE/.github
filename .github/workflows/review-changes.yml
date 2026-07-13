@@ -14,8 +14,6 @@ on:
     secrets:
       MIGADU_PASSWORD:
         required: true
-      SMTP_PASSWORD:
-        required: true
 
 permissions:
   contents: read

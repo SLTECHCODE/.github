@@ -17,6 +17,7 @@ on:
       SMTP_PASSWORD:
         required: true
 
+
 permissions:
   contents: read
 

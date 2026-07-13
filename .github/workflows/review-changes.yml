@@ -1,5 +1,5 @@
 name: Multi-language Analyzer Review
-
+description: Analyzes newly created code changes
 on:
   workflow_call:
     inputs:

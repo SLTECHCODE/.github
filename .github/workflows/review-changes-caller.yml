@@ -12,4 +12,4 @@ jobs:
       email_to: "slt@sltech.no"
       email_from: "noreply@sltech.no"
     secrets:
-      SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+      MIGADU_PASSWORD: ${{ secrets.MIGADU_PASSWORD }}

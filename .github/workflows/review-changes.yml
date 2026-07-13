@@ -17,7 +17,6 @@ on:
       SMTP_PASSWORD:
         required: true
 
-
 permissions:
   contents: read
 
@@ -184,10 +183,7 @@ jobs:
           server_port: 465
           secure: true
           username: noreply@sltech.no
-<<<<<<< .merge_file_gu893k
-=======
-          password: ${{ secrets.SMTP_PASSWORD }}
->>>>>>> .merge_file_56cRXE
+          password: ${{ secrets.MIGADU_PASSWORD }}
           subject: "[${{ github.repository }}] Analyzer Review - ${{ github.ref_name }} @ ${{ github.sha }}"
           to: ${{ inputs.email_to }}
           from: ${{ inputs.email_from }}

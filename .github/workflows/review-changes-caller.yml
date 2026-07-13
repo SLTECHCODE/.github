@@ -13,3 +13,8 @@ jobs:
       email_from: "noreply@sltech.no"
     secrets:
       SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: write
